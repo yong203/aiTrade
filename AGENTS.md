@@ -3,8 +3,13 @@
 ## 프로젝트와 기준 문서
 
 - aiTrade는 한국투자증권·토스증권 API와 AI를 활용하는 개인용 주식 자동매매 프로젝트다.
-- 프로젝트 개요는 `README.md`, Git·GitHub 규칙은 `docs/GIT_WORKFLOW.md`를 따른다. 작업에 필요한 문서만 읽는다.
 - 현재 구현 코드와 실행·검증 설정은 없다. 기술 스택·폴더 구조·명령을 추측하지 말고 실제 저장소에서 확인한다.
+- 프로젝트 개요: `README.md`
+- 기능 범위·설계 상태 확인: `docs/REQUIREMENTS_AND_DESIGN.md`
+- 금융 용어의 뜻·프로젝트 사용 기준 확인: `docs/FINANCIAL_GLOSSARY.md`
+- Git·GitHub 작업 규칙 확인: `docs/GIT_WORKFLOW.md`
+- 개선 사례 기록 시 구조·측정 기준 참고: `docs/GROWTH_LOG.md`
+- 작업에 필요한 문서만 읽는다.
 
 ## 작업 원칙
 

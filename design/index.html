@@ -1,0 +1,243 @@
+<!doctype html>
+<html lang="ko">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="color-scheme" content="dark" />
+    <title>aiTrade UI/UX Prototype</title>
+    <link rel="stylesheet" crossorigin href="https://cdn.jsdelivr.net/gh/orioncactus/pretendard/dist/web/static/pretendard.css" />
+    <link rel="stylesheet" href="styles.css?v=20261004-33" />
+  </head>
+  <body>
+    <div class="app-shell" id="appShell">
+      <div class="app-main">
+        <header class="topbar">
+          <button class="topbar__brand" type="button" data-route="stocks" aria-label="aiTrade 홈으로 이동">
+            <span class="brand__symbol" aria-hidden="true"><i></i><i></i><i></i></span>
+            <span>aiTrade</span>
+          </button>
+          <div class="topbar__markets" id="topbarMarkets" aria-label="시장 상태 요약"></div>
+          <div class="topbar__actions">
+            <label class="scenario-control">
+              <span class="preview-badge">PREVIEW</span>
+              <select id="scenarioSelect" aria-label="프로토타입 상태">
+                <option value="normal">정상</option>
+                <option value="disconnected">시세 연결 끊김</option>
+                <option value="market-error">장 정보 확인 실패</option>
+                <option value="order-uncertain">주문 접수 확인 중</option>
+                <option value="order-rejected">주문 거부</option>
+                <option value="ledger-mismatch">장부 불일치</option>
+                <option value="reconciled" hidden>장부 대조 완료</option>
+              </select>
+            </label>
+            <button class="icon-button" type="button" id="notificationButton" aria-label="알림 열기" aria-controls="notificationPanel" aria-expanded="false">
+              <svg class="icon icon--bell" viewBox="0 0 24 24" aria-hidden="true">
+                <path d="M18 8a6 6 0 0 0-12 0c0 7-3 7-3 9h18c0-2-3-2-3-9"></path>
+                <path d="M10 21h4"></path>
+              </svg>
+              <span class="notification-dot"></span>
+            </button>
+            <span class="topbar__time" id="currentTime">09.22 10:32 KST · 예시</span>
+          </div>
+        </header>
+
+        <div id="globalBanner" aria-live="polite"></div>
+        <main class="page" id="pageContent" tabindex="-1"></main>
+      </div>
+
+      <aside class="sidebar" aria-label="주요 메뉴">
+        <div class="sidebar__header">
+          <span class="sidebar__title">메뉴</span>
+          <button class="sidebar-toggle" type="button" data-action="toggle-sidebar" aria-label="메뉴 접기" aria-controls="mainNavigation" aria-expanded="true" title="메뉴 접기">
+            <svg class="sidebar-toggle__icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><rect width="18" height="18" x="3" y="3" rx="2" /><path d="M15 3v18" /><path class="sidebar-toggle__arrow" d="m8 9 3 3-3 3" /></svg>
+          </button>
+        </div>
+
+        <nav class="main-nav" id="mainNavigation">
+          <button class="nav-item is-active" type="button" data-route="stocks" aria-label="종목" title="종목">
+            <svg class="nav-icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="M9 5v4" /><rect width="4" height="6" x="7" y="9" rx="1" /><path d="M9 15v2" /><path d="M17 3v2" /><rect width="4" height="8" x="15" y="5" rx="1" /><path d="M17 13v3" /><path d="M3 3v16a2 2 0 0 0 2 2h16" /></svg><span class="nav-label">종목</span>
+          </button>
+          <button class="nav-item" type="button" data-route="portfolio" aria-label="투자 현황" title="투자 현황">
+            <svg class="nav-icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="M21 12c.552 0 1.005-.449.95-.998a10 10 0 0 0-8.953-8.951c-.55-.055-.998.398-.998.95v8a1 1 0 0 0 1 1z" /><path d="M21.21 15.89A10 10 0 1 1 8 2.83" /></svg><span class="nav-label">투자 현황</span>
+          </button>
+          <div class="ai-nav-group">
+            <button class="nav-item nav-item--ai" type="button" data-route="ai" aria-label="AI 트레이더" title="AI 트레이더" aria-controls="aiNavSubmenu" aria-expanded="false">
+              <svg class="nav-icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="M12 8V4H8" /><rect width="16" height="12" x="4" y="8" rx="2" /><path d="M2 14h2" /><path d="M20 14h2" /><path d="M15 13v2" /><path d="M9 13v2" /></svg><span class="nav-label">AI 트레이더</span><svg class="nav-chevron" viewBox="0 0 24 24" aria-hidden="true"><path d="m6 9 6 6 6-6"></path></svg>
+            </button>
+            <div class="ai-nav-submenu" id="aiNavSubmenu" role="group" aria-label="AI 트레이더 목록" aria-hidden="true" inert><div class="ai-nav-submenu__clip"><div class="ai-nav-list"></div></div></div>
+          </div>
+        </nav>
+
+        <div class="sidebar__footer">
+          <div class="profile-button" aria-label="yong 개인 계정">
+            <span class="avatar">Y</span><span><strong>yong</strong><small>개인 계정</small></span><span aria-hidden="true">···</span>
+          </div>
+        </div>
+      </aside>
+
+      <div class="mobile-ai-picker" id="mobileAiPicker" role="group" aria-label="AI 트레이더 목록" hidden></div>
+      <nav class="mobile-nav" aria-label="모바일 주요 메뉴">
+        <button class="is-active" type="button" data-route="stocks"><svg class="nav-icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="M9 5v4" /><rect width="4" height="6" x="7" y="9" rx="1" /><path d="M9 15v2" /><path d="M17 3v2" /><rect width="4" height="8" x="15" y="5" rx="1" /><path d="M17 13v3" /><path d="M3 3v16a2 2 0 0 0 2 2h16" /></svg><small>종목</small></button>
+        <button type="button" data-route="portfolio"><svg class="nav-icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="M21 12c.552 0 1.005-.449.95-.998a10 10 0 0 0-8.953-8.951c-.55-.055-.998.398-.998.95v8a1 1 0 0 0 1 1z" /><path d="M21.21 15.89A10 10 0 1 1 8 2.83" /></svg><small>현황</small></button>
+        <button type="button" data-route="ai" aria-label="AI 트레이더" aria-controls="mobileAiPicker" aria-expanded="false"><svg class="nav-icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="M12 8V4H8" /><rect width="16" height="12" x="4" y="8" rx="2" /><path d="M2 14h2" /><path d="M20 14h2" /><path d="M15 13v2" /><path d="M9 13v2" /></svg><small>AI 트레이더</small></button>
+      </nav>
+    </div>
+
+    <dialog class="dialog search-dialog" id="searchDialog" aria-labelledby="searchTitle">
+      <form method="dialog" class="dialog__surface search-surface">
+        <header class="dialog__header">
+          <div>
+            <h2 id="searchTitle">종목 검색</h2>
+          </div>
+          <button class="icon-button" type="button" data-dialog-close aria-label="검색 닫기">×</button>
+        </header>
+        <label class="search-field">
+          <span aria-hidden="true">⌕</span>
+          <input id="searchInput" type="search" aria-label="종목명 또는 코드·티커 검색" placeholder="종목명 또는 코드·티커 검색" autocomplete="off" />
+          <kbd>ESC</kbd>
+        </label>
+        <div class="search-tabs" aria-label="검색 범위">
+          <button class="is-active" type="button" data-search-scope="all">전체</button>
+          <button type="button" data-search-scope="kr">국내</button>
+          <button type="button" data-search-scope="us">미국</button>
+          <span id="searchCount" role="status">추천 5개</span>
+        </div>
+        <div class="search-results" id="searchResults"></div>
+        <footer class="search-footer"><span><kbd>ESC</kbd> 닫기</span></footer>
+      </form>
+    </dialog>
+
+    <dialog class="dialog reorder-dialog" id="reorderDialog" aria-labelledby="reorderTitle">
+      <form method="dialog" class="dialog__surface reorder-surface">
+        <header class="dialog__header">
+          <div><h2 id="reorderTitle">관심종목 순서</h2><p>끌어서 이동하거나 핸들에서 위·아래 화살표를 누르세요.</p></div>
+          <button class="icon-button" type="button" data-dialog-close aria-label="순서 변경 닫기">×</button>
+        </header>
+        <div class="reorder-list" id="reorderList"></div><span class="sr-only" id="reorderAnnouncement" role="status"></span>
+        <div class="dialog__actions">
+          <button class="button button--secondary" value="cancel">취소</button>
+          <button class="button button--primary" value="confirm">저장</button>
+        </div>
+      </form>
+    </dialog>
+
+    <dialog class="dialog" id="amendDialog" aria-labelledby="amendTitle">
+      <form method="dialog" class="dialog__surface form-surface" id="amendForm" novalidate>
+        <header class="dialog__header">
+          <div><span class="eyebrow">모의 주문 정정</span><h2 id="amendTitle">주문 정정</h2></div>
+          <button class="icon-button" type="button" data-dialog-close aria-label="주문 정정 닫기">×</button>
+        </header>
+        <div class="confirm-summary amend-summary" id="amendCurrent"></div>
+        <label class="field"><span>변경할 주문가격</span><div class="input-affix"><input name="price" inputmode="numeric" autocomplete="off" aria-describedby="amendError" /><span id="amendCurrency">원</span></div></label>
+        <label class="field"><span>변경할 미체결 잔여수량</span><div class="input-affix"><input name="remaining" inputmode="numeric" autocomplete="off" aria-describedby="amendError" /><span>주</span></div></label>
+        <p class="form-error" id="amendError" role="alert" hidden></p>
+        <div class="notice notice--info"><strong>화면 검토용 모의 입력</strong><span>정정 가능한 항목·범위는 토스증권 API 확인이 필요합니다. 실제 정정 요청은 전송되지 않습니다.</span></div>
+        <div class="dialog__actions"><button class="button button--secondary" type="button" data-dialog-close>취소</button><button class="button button--primary" value="review">변경 내용 확인</button></div>
+      </form>
+    </dialog>
+
+    <dialog class="dialog" id="confirmDialog" aria-labelledby="confirmTitle">
+      <form method="dialog" class="dialog__surface confirm-surface">
+        <div class="confirm-icon" id="confirmIcon" aria-hidden="true">✓</div>
+        <span class="eyebrow" id="confirmEyebrow">주문 확인</span>
+        <h2 id="confirmTitle">주문을 제출할까요?</h2>
+        <p class="dialog-copy" id="confirmCopy"></p>
+        <div class="confirm-summary" id="confirmSummary"></div>
+        <div class="dialog__actions">
+          <button class="button button--secondary" value="cancel">돌아가기</button>
+          <button class="button button--primary" value="confirm" id="confirmAction">확인</button>
+        </div>
+      </form>
+    </dialog>
+
+    <dialog class="dialog" id="aiRenameDialog" aria-labelledby="aiRenameTitle">
+      <form method="dialog" class="dialog__surface form-surface" id="aiRenameForm">
+        <header class="dialog__header">
+          <div><span class="eyebrow">AI 트레이더</span><h2 id="aiRenameTitle">이름 수정</h2></div>
+          <button class="icon-button" type="button" data-dialog-close aria-label="이름 수정 닫기">×</button>
+        </header>
+        <label class="field"><span>이름</span><input name="name" required maxlength="24" autocomplete="off" placeholder="트레이더 이름" /></label>
+        <p class="cell-secondary">다른 AI 트레이더와 겹치지 않는 이름을 입력하세요.</p>
+        <div class="dialog__actions"><button class="button button--secondary" type="button" data-dialog-close>취소</button><button class="button button--primary" value="confirm">이름 저장</button></div>
+      </form>
+    </dialog>
+
+    <dialog class="dialog ai-create-dialog" id="aiFormDialog" aria-labelledby="aiFormTitle">
+      <form method="dialog" class="dialog__surface form-surface ai-create-surface" id="aiForm" novalidate>
+        <header class="dialog__header">
+          <div><span class="eyebrow">AI 트레이더</span><h2 id="aiFormTitle" tabindex="-1">새 트레이더 만들기</h2><p class="cell-secondary" id="aiFormTraderName" hidden></p></div>
+          <button class="icon-button" type="button" data-dialog-close aria-label="닫기">×</button>
+        </header>
+        <div class="ai-create-body">
+        <section class="ai-create-section" id="aiFormBasics" aria-label="기본 정보">
+        <label class="field"><span>이름</span><input name="name" required maxlength="24" placeholder="트레이더 이름" /></label>
+        <fieldset class="choice-field">
+          <legend>투자 유형</legend>
+          <label><input type="radio" name="style" value="초단타" /><span><strong>초단타</strong><small>수초~수분 · 당일 청산</small></span></label>
+          <label><input type="radio" name="style" value="중기" /><span><strong>중기</strong><small>수일~수주 보유</small></span></label>
+          <label><input type="radio" name="style" value="장기" /><span><strong>장기</strong><small>수개월 이상 보유</small></span></label>
+        </fieldset>
+        <label class="field"><span>최초 배정금</span><div class="input-affix"><input name="amount" inputmode="numeric" pattern="[0-9,]+" required placeholder="금액 입력" aria-describedby="aiAmountAvailable" /><span>원</span></div></label>
+        <p class="cell-secondary" id="aiAmountAvailable" aria-live="polite"></p>
+        </section>
+        <section class="ai-create-section" aria-label="투자 대상">
+          <h3 id="aiTargetSectionTitle">투자 대상</h3>
+          <fieldset class="choice-field ai-target-mode">
+            <legend>종목 선정 방식</legend>
+            <label><input type="radio" name="selectionMode" value="auto" checked /><span><strong>종목 선택하지 않음</strong><small>AI가 판단할 때마다 종목 선정</small></span></label>
+            <label><input type="radio" name="selectionMode" value="fixed" /><span><strong>직접 선택</strong><small>선택한 종목만 대상으로 투자</small></span></label>
+          </fieldset>
+          <div class="ai-target-details">
+          <p class="cell-secondary" id="aiTargetModeHint">AI가 국내 주식·ETF에서 투자 후보를 유동적으로 탐색합니다.</p>
+          <div class="ai-stock-picker-expander" id="aiStockPicker" inert aria-hidden="true">
+          <div class="ai-stock-picker">
+            <div class="ai-stock-selection">
+              <strong id="aiSelectedStockCount" aria-live="polite">선택한 종목 0개</strong>
+              <div class="ai-stock-chips" id="aiSelectedStocks" aria-label="선택한 투자 대상"></div>
+            </div>
+            <div class="segmented-control ai-stock-source" role="group" aria-label="종목 추가 방법">
+              <button type="button" data-ai-stock-source="search" aria-pressed="true" class="is-active">종목 검색</button>
+              <button type="button" data-ai-stock-source="watch" aria-pressed="false">내 관심종목</button>
+            </div>
+            <label class="field ai-stock-search" id="aiStockSearchField"><span class="sr-only">투자 대상 종목 검색</span><input id="aiStockSearchInput" type="search" autocomplete="off" placeholder="종목명 또는 코드로 검색" /></label>
+            <div class="ai-stock-results" id="aiStockResults" role="group" aria-label="추가할 종목"></div>
+            <p class="cell-secondary">국내 주식·ETF 선택 가능 · 미국 주식은 후속 지원 예정</p>
+          </div>
+          </div>
+          </div>
+          <p class="sr-only" id="aiStockSelectionStatus" role="status"></p>
+        </section>
+        <div class="notice notice--info" id="aiStrategyNotice"><strong>전략 기준은 아직 보류 상태입니다.</strong><span>선택한 투자 유형의 전략이 확정되기 전에는 자동매매를 시작할 수 없습니다.</span></div>
+        </div>
+        <p class="form-error form-error--inline" id="aiFormError" role="alert" hidden><span class="form-error__icon" aria-hidden="true">!</span><span class="form-error__message"></span></p>
+        <div class="dialog__actions">
+          <button class="button button--secondary" type="button" data-dialog-close>취소</button>
+          <button class="button button--primary" value="confirm" id="aiCreateSubmit">트레이더 만들기</button>
+        </div>
+      </form>
+    </dialog>
+
+    <dialog class="dialog" id="fundDialog" aria-labelledby="fundTitle">
+      <form method="dialog" class="dialog__surface form-surface" id="fundForm">
+        <header class="dialog__header"><div><h2 id="fundTitle">자금 관리</h2><p class="cell-secondary">운용 전 또는 중지 완료된 AI 트레이더의 현금을 이동합니다.</p></div><button class="icon-button" type="button" data-dialog-close aria-label="자금 관리 닫기">×</button></header>
+        <fieldset class="fund-direction"><legend>이동 방향</legend><label><input type="radio" name="direction" value="add" checked> 추가 배정</label><label><input type="radio" name="direction" value="withdraw"> 회수</label></fieldset>
+        <label class="field"><span>금액</span><div class="input-affix"><input name="amount" inputmode="numeric" pattern="[0-9,]+" required placeholder="금액 입력"><span>원</span></div></label>
+        <p class="cell-secondary" id="fundAvailable"></p>
+        <div class="dialog__actions"><button class="button button--secondary" type="button" data-dialog-close>취소</button><button class="button button--primary" value="confirm">모의 이동</button></div>
+      </form>
+    </dialog>
+
+    <aside class="notification-panel" id="notificationPanel" aria-label="알림" hidden>
+      <header><div><span class="eyebrow">09.22 예시</span><h2>알림</h2></div><button class="icon-button" id="notificationClose" aria-label="알림 닫기">×</button></header>
+      <div class="notification-list">
+        <article><span class="notification-symbol is-rise">매수</span><div><strong>삼성전자 주문이 접수됐어요</strong><p>72,600원 · 10주 · 10:28</p></div></article>
+        <article><span class="notification-symbol is-warning">부분</span><div><strong>현대차 3주가 체결됐어요</strong><p>잔여 2주 · 10:14</p></div></article>
+        <article><span class="notification-symbol is-complete">완료</span><div><strong>Tesla 매도 주문이 모두 체결됐어요</strong><p data-notification-trade>—</p></div></article>
+      </div>
+      <p class="notification-note">앱이 열려 있을 때만 새 알림을 표시합니다.</p>
+    </aside>
+
+    <div class="toast-region" id="toastRegion" aria-live="polite"></div>
+    <script src="prototype.js?v=20261004-27"></script>
+  </body>
+</html>

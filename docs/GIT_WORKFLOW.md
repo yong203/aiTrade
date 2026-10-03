@@ -16,8 +16,9 @@
 이슈 제목은 작업 PR과 동일한 작업 유형·영역 표기 규칙을 적용한다. 이슈 자신의 번호는 제목에 중복 작성하지 않는다.
 
 - [작업 요청 템플릿](../.github/ISSUE_TEMPLATE/task.md)을 사용해 목적·작업 범위·완료 조건을 작성한다. 라벨은 작업 유형에 맞게 선택한다.
-- 프론트엔드 작업에는 `[FE]`, 백엔드 작업에는 `[BE]`, 두 영역을 함께 변경하는 작업에는 `[FE/BE]`를 표시한다.
-- 문서·CI 등 영역 구분이 필요 없는 작업에서는 영역 표시를 생략한다.
+- 프론트엔드 구현 작업에는 `[FE]`, 백엔드 구현 작업에는 `[BE]`, 두 영역을 함께 변경하는 작업에는 `[FE/BE]`를 표시한다.
+- 제품 UI/UX·프로토타입 등 디자인 작업은 `design` 유형을 사용하고 영역 표시를 생략한다. 디자인을 실제 프론트엔드 코드로 구현하는 작업은 `feat: [FE]`로 별도 관리한다.
+- 문서·CI 등 영역 구분이 필요 없는 작업에서도 영역 표시를 생략한다.
 
 제목 형식:
 
@@ -34,6 +35,7 @@
 feat: [FE] 거래내역 대시보드 구현
 feat: [BE] 거래내역 조회 API 구현
 feat: [FE/BE] 거래내역 조회 기능 구현
+design: 전체 UI/UX 고해상도 프로토타입 설계
 docs: Git·GitHub 개발 규칙 정리 및 문서화
 ```
 
@@ -43,6 +45,7 @@ docs: Git·GitHub 개발 규칙 정리 및 문서화
 |---|---|
 | 기능 구현 | `✨ Feature` |
 | 버그 수정 | `🚨 Fix` |
+| 제품 UI/UX·프로토타입 설계 | `🎨 Design` |
 | 문서 | `📝 Docs` |
 | 테스트 | `🧪 Test` |
 | 코드 구조 개선 | `♻️ Refactor` |
@@ -68,7 +71,7 @@ gh issue develop 42 --repo yong203/aiTrade --base dev --name feat/42-fe-account-
 
 `release/*`를 생략한 Git flow 변형을 사용한다.
 
-기본 브랜치와 통합 브랜치 이름은 `dev`로 통일한다. 별도 프론트·백엔드 통합 브랜치는 두지 않는다. 일반 작업은 최신 `dev`에서 브랜치를 생성한다. Git 브랜치는 담당 폴더만이 아니라 저장소 전체 상태를 가진다.
+기본 브랜치와 통합 브랜치 이름은 `dev`로 통일한다. 별도 프론트·백엔드 통합 브랜치는 두지 않는다. 일반 작업은 최신 `dev`에서 브랜치를 생성한다. Git 브랜치는 저장소 전체 상태를 가진다.
 
 | 브랜치 | 역할 | 유지 |
 |---|---|---|
@@ -76,6 +79,7 @@ gh issue develop 42 --repo yong203/aiTrade --base dev --name feat/42-fe-account-
 | `dev` | 완료한 기능·수정 통합 및 검증 | 상시 |
 | `feat/*` | 새로운 기능 구현 | 작업 완료 후 삭제 |
 | `fix/*` | 버그 수정 | 작업 완료 후 삭제 |
+| `design/*` | 제품 UI/UX·프로토타입 설계 | 작업 완료 후 삭제 |
 | `docs/*` | 문서 변경 | 작업 완료 후 삭제 |
 | `test/*` | 테스트 변경 | 작업 완료 후 삭제 |
 | `refactor/*` | 기능을 유지하는 코드 구조 개선 | 작업 완료 후 삭제 |
@@ -85,12 +89,13 @@ gh issue develop 42 --repo yong203/aiTrade --base dev --name feat/42-fe-account-
 
 ## 5. 작업 브랜치 이름
 
-작업 브랜치 유형은 `feat`, `fix`, `docs`, `test`, `refactor`, `chore`, `ci`를 사용한다. `init`은 최초 초기화 커밋에만 사용한다.
+작업 브랜치 유형은 `feat`, `fix`, `design`, `docs`, `test`, `refactor`, `chore`, `ci`를 사용한다. `init`은 최초 초기화 커밋에만 사용한다.
 
 - 브랜치에서는 소문자 `fe`, `be`를 사용한다.
 - 브랜치의 이슈 번호에는 `#`를 붙이지 않는다.
 - 작업 설명은 소문자 영문과 하이픈으로 작성한다.
 - FE·BE를 함께 구현하는 작업은 `feat/42-account-history`처럼 영역 표시를 생략할 수 있다.
+- 디자인 작업은 `design/47-ui-ux-prototype`처럼 영역 표시를 생략한다.
 - 작업 브랜치는 병합 후 삭제한다. 후속 수정은 최신 `dev`에서 새 브랜치를 생성한다.
 
 기본 형식:
@@ -112,6 +117,7 @@ gh issue develop 42 --repo yong203/aiTrade --base dev --name feat/42-fe-account-
 feat/42-fe-account-history
 feat/42-be-account-history
 fix/43-be-partial-fill-balance
+design/47-ui-ux-prototype
 docs/44-github-workflow
 chore/46-ci-checks
 ```
@@ -123,7 +129,8 @@ Conventional Commits를 사용하며 범위(scope)는 생략한다.
 - 작업 브랜치의 개별 커밋에서는 이슈 번호를 생략한다.
 - 최초 초기화 커밋은 `init: aiTrade 프로젝트 초기화`로 작성하고, 사용자 확인을 받은 간단한 README만 포함한다.
 - FE·BE 작업의 커밋에서는 해당 영역을 표시한다. 영역 구분이 필요 없는 문서·관리 작업은 생략한다.
-- 커밋 유형은 브랜치 유형이 아니라 실제 변경 내용에 따라 선택한다.
+- 디자인 작업은 `design:` 유형을 사용하고 영역 표시를 생략한다. 디자인의 실제 프론트엔드 구현 커밋에는 `feat: [FE]`를 사용한다.
+- 커밋 유형은 실제 변경 내용에 따라 선택한다.
 - 괄호로 범위를 지정하는 `feat(account):` 형식은 사용하지 않는다.
 
 기본 형식:
@@ -141,6 +148,7 @@ Conventional Commits를 사용하며 범위(scope)는 생략한다.
 feat: [BE] 거래내역 조회 API 구현
 feat: [FE] 거래내역 테이블 추가
 fix: [BE] 거래내역 날짜 정렬 수정
+design: 전체 UI/UX 고해상도 프로토타입 설계
 test: [BE] 거래내역 페이지네이션 검증
 docs: GitHub 개발 규칙 정리
 ```
@@ -151,6 +159,7 @@ docs: GitHub 개발 규칙 정리
 | `release` | 검증한 버전 출시 |
 | `feat` | 새로운 기능 |
 | `fix` | 버그 수정 |
+| `design` | 제품 UI/UX·프로토타입 설계 |
 | `docs` | 문서 변경 |
 | `test` | 테스트 변경 |
 | `refactor` | 기능을 유지하는 코드 구조 개선 |
@@ -159,7 +168,7 @@ docs: GitHub 개발 규칙 정리
 
 ## 7. 작업 PR
 
-프론트엔드 작업 PR에는 `[FE]`, 백엔드 작업 PR에는 `[BE]`, FE·BE를 함께 변경하는 PR에는 `[FE/BE]`를 사용한다. 문서·CI 등 영역 구분이 필요 없는 PR에서는 표시를 생략한다. 하나의 PR은 하나의 논리적 작업으로 정리한다.
+프론트엔드 구현 작업 PR에는 `[FE]`, 백엔드 구현 작업 PR에는 `[BE]`, FE·BE를 함께 변경하는 PR에는 `[FE/BE]`를 사용한다. 디자인 작업 PR은 `design:` 유형을 사용하고 영역 표시를 생략한다. 문서·CI 등 영역 구분이 필요 없는 PR에서도 영역 표시를 생략한다. 하나의 PR은 하나의 논리적 작업으로 정리한다.
 
 - [PR 템플릿](../.github/pull_request_template.md)에 변경 내용·관련 이슈·검증 결과를 작성한다. 참고 사항은 필요한 경우에만 작성한다.
 - PR 생성 시 이 문서의 작업 유형 라벨 표에 따라 변경 내용에 맞는 라벨을 지정한다. 출시 PR에는 `🔖 Release` 라벨을 지정한다.
@@ -179,6 +188,7 @@ docs: GitHub 개발 규칙 정리
 feat: [FE] 거래내역 대시보드 구현 (#42)
 feat: [BE] 거래내역 조회 API 구현 (#42)
 fix: [BE] 부분체결 후 잔고 계산 수정 (#43)
+design: 전체 UI/UX 고해상도 프로토타입 설계 (#47)
 docs: GitHub 개발 규칙 정리 (#44)
 ```
 

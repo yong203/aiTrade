@@ -141,7 +141,10 @@ const aiRenameDialog = document.getElementById("aiRenameDialog");
 const aiRenameForm = document.getElementById("aiRenameForm");
 const reorderDialog = document.getElementById("reorderDialog");
 const reorderList = document.getElementById("reorderList");
-const notificationPanel = document.getElementById("notificationPanel");
+const tradeNotifications = document.getElementById("tradeNotifications");
+const tradeNotificationList = document.getElementById("tradeNotificationList");
+const mobileNotificationDialog = document.getElementById("mobileNotificationDialog");
+let notificationCloseToRecord = false;
 const notificationMotion = window.matchMedia("(prefers-reduced-motion: reduce)");
 let confirmCallback = null;
 let confirmCancelCallback = null;
@@ -380,6 +383,7 @@ function renderSidebar() {
   toggle.setAttribute("aria-expanded", String(!state.sidebarCollapsed));
   toggle.setAttribute("aria-label", label);
   toggle.title = label;
+  syncNotificationPlacement();
 }
 
 function renderAiNavigation() {
@@ -404,36 +408,196 @@ function renderAiNavigation() {
   document.querySelectorAll('[data-route="ai"]').forEach((button) => button.setAttribute("aria-expanded", String(open)));
 }
 
+// Alerts are mock fill summaries; dismissal never changes their source records.
+function notificationFromTrade(trade, id) {
+  const ownerKey = trade.ownerKey ?? (trade.owner === "개인" ? "personal" : Object.keys(aiFixtures).find((key) => aiFixtures[key].name === trade.owner));
+  return { ...trade, id, ownerKey, at: new Date(`${trade.date}T${trade.time.slice(-5)}:00+09:00`).getTime() };
+}
+const fillNotifications = previewTrades.slice(0, 8).map((trade, index) => notificationFromTrade(trade, `history-fill-${index}`));
+fillNotifications.push(notificationFromTrade({ ownerKey: "swing", stock: "현대차", side: "매수", quantity: "3주", price: "247,000원", date: "2026-09-22", time: "09.22 10:14" }, "hyundai-partial-fill"));
+const dismissedNotifications = new Set();
+const enteredNotifications = new Set();
+const notificationDeletions = new Map();
+const notificationEntrances = new Map();
+let mockFillSequence = 0;
+
+function activeNotifications() {
+  return fillNotifications.filter((item) => !dismissedNotifications.has(item.id)).sort((a, b) => b.at - a.at || (b.sequence ?? 0) - (a.sequence ?? 0));
+}
+
+function notificationOwner(item) {
+  return item.ownerKey === "personal" ? "개인" : aiFixtures[item.ownerKey]?.name ?? "AI";
+}
+
+function notificationCardContents(item) {
+  const owner = escapeHtml(notificationOwner(item));
+  const title = `${escapeHtml(item.stock)} ${item.side}`;
+  const price = formatTradePrice(item);
+  return `<button class="trade-notification__body" type="button" data-notification-open="${item.id}" aria-label="${owner} ${title} ${item.quantity} · 주당 ${price} · ${escapeHtml(item.time)} · 주문·거래 보기" title="${owner} ${title} ${item.quantity} · 주당 체결가 ${price}">
+    <span class="trade-notification__owner">${owner}</span><time datetime="${item.date}T${item.time.slice(-5)}:00+09:00">${escapeHtml(item.time)}</time>
+    <span class="trade-notification__summary"><strong class="trade-notification__trade">${title}</strong><span class="trade-notification__amount"><span class="trade-notification__quantity">${item.quantity}</span><span class="trade-notification__separator" aria-hidden="true">/</span><span class="trade-notification__price">${price}</span></span></span>
+  </button><button class="trade-notification__dismiss" type="button" data-notification-dismiss="${item.id}" aria-label="${owner} ${title} 알림 지우기" title="이 알림 지우기"><svg viewBox="0 0 16 16" aria-hidden="true" focusable="false"><path d="m3 3 10 10M13 3 3 13" /></svg></button>`;
+}
+
+function syncSidebarNotificationWidth() {
+  if (window.innerWidth <= 820) return;
+  const sidebar = document.querySelector(".sidebar");
+  const host = document.getElementById("sidebarNotificationsHost");
+  const scrollbarWidth = `${Math.max(0, sidebar.offsetWidth - sidebar.clientWidth)}px`;
+  if (host.style.getPropertyValue("--sidebar-scrollbar-width") !== scrollbarWidth) host.style.setProperty("--sidebar-scrollbar-width", scrollbarWidth);
+}
+
+const sidebarNotificationResizeObserver = new ResizeObserver(syncSidebarNotificationWidth);
+sidebarNotificationResizeObserver.observe(document.querySelector(".sidebar"));
+
+function syncNotificationPlacement() {
+  const mobile = window.innerWidth <= 820;
+  const host = document.getElementById(mobile ? "mobileNotificationsHost" : "sidebarNotificationsHost");
+  syncSidebarNotificationWidth();
+  if (!mobile && mobileNotificationDialog.open) {
+    dialogClosures.get(mobileNotificationDialog)?.finish();
+    mobileNotificationDialog.close();
+  }
+  if (tradeNotifications.parentElement !== host) host.append(tradeNotifications);
+  // Hidden cards must not remain keyboard destinations in a collapsed menu.
+  tradeNotifications.inert = !mobile && state.sidebarCollapsed;
+  animatePendingNotifications();
+}
+
+function animatePendingNotifications() {
+  if (!tradeNotifications.getClientRects().length || (window.innerWidth <= 820 && !mobileNotificationDialog.open)) return;
+  tradeNotificationList.querySelectorAll("[data-notification-id]").forEach((card) => {
+    const id = card.dataset.notificationId;
+    if (enteredNotifications.has(id) || notificationDeletions.has(id)) return;
+    enteredNotifications.add(id);
+    if (notificationMotion.matches) return;
+    const animation = card.animate([{ transform: "translateX(110%)", opacity: 0 }, { transform: "translateX(0)", opacity: 1 }], { duration: 260, easing: "cubic-bezier(0.2, 0.8, 0.2, 1)" });
+    notificationEntrances.set(id, animation);
+    animation.onfinish = animation.oncancel = () => notificationEntrances.delete(id);
+  });
+}
+
 function renderNotifications() {
-  const trade = previewTrades.find((item) => item.stock === "Tesla");
-  notificationPanel.querySelector("[data-notification-trade]").textContent = `${formatTradePrice(trade)} · ${trade.quantity} · 09:52`;
-  const first = notificationPanel.querySelector(".notification-list article:first-child");
-  if (!first) return;
-  const symbol = first.querySelector(".notification-symbol");
-  symbol.textContent = state.scenario === "order-rejected" ? "거부" : "매수";
-  symbol.className = `notification-symbol ${state.scenario === "order-rejected" ? "is-warning" : "is-rise"}`;
-  first.querySelector("strong").textContent = state.scenario === "order-uncertain" ? "삼성전자 주문 접수를 확인하고 있어요" : state.scenario === "order-rejected" ? "삼성전자 주문이 거부됐어요" : "삼성전자 주문이 접수됐어요";
-  first.querySelector("p").textContent = state.scenario === "order-uncertain" ? "접수 확인 전 · 같은 주문 재전송 안 함" : state.scenario === "order-rejected" ? "거부 사유 확인 필요 · 10:28" : "72,600원 · 10주 · 10:28";
-  // The prototype has no event IDs; only changed notification content is new.
-  const signature = `${first.querySelector("strong").textContent}|${first.querySelector("p").textContent}`;
-  if (first.dataset.notificationSignature !== signature) {
-    first.dataset.notificationSignature = signature;
-    first.dataset.highlightPending = "true";
-    highlightNewNotifications();
+  const items = activeNotifications();
+  const activeIds = new Set(items.map((item) => item.id));
+  tradeNotificationList.querySelectorAll("[data-notification-id]").forEach((card) => {
+    if (!activeIds.has(card.dataset.notificationId)) card.remove();
+  });
+  tradeNotificationList.querySelector(".notification-empty")?.remove();
+  items.forEach((item, index) => {
+    let card = tradeNotificationList.querySelector(`[data-notification-id="${item.id}"]`);
+    if (!card) {
+      card = document.createElement("article");
+      card.className = "trade-notification";
+      card.dataset.notificationId = item.id;
+    }
+    const content = notificationCardContents(item);
+    // Keep focused controls and running animations intact during unrelated renders.
+    if (card.dataset.content !== content && !notificationDeletions.has(item.id)) { card.innerHTML = content; card.dataset.content = content; }
+    const position = tradeNotificationList.children[index];
+    if (position !== card) tradeNotificationList.insertBefore(card, position ?? null);
+  });
+  if (!items.length) tradeNotificationList.innerHTML = '<p class="notification-empty">체결 알림이 없습니다.</p>';
+  tradeNotifications.querySelector('[data-action="clear-notifications"]').disabled = !items.some((item) => !notificationDeletions.has(item.id));
+  document.querySelectorAll("[data-notification-count]").forEach((count) => {
+    count.textContent = items.length > 99 ? "99+" : items.length;
+    count.classList.toggle("notification-count--overflow", items.length > 99);
+    count.hidden = !items.length;
+    const label = `남은 체결 알림 ${items.length}개, 목록 보기`;
+    count.closest("button").setAttribute("aria-label", label);
+    count.closest("button").title = label;
+  });
+  animatePendingNotifications();
+}
+
+function dismissNotifications(ids, restoreKeyboardFocus = false) {
+  // Freeze only this batch. A fill arriving during its animation stays in the list.
+  const batch = ids.filter((id) => !dismissedNotifications.has(id) && !notificationDeletions.has(id));
+  const clearButton = tradeNotifications.querySelector('[data-action="clear-notifications"]');
+  const restoreClearFocus = document.activeElement === clearButton;
+  const stagger = batch.length > 1 ? Math.min(70, 420 / (batch.length - 1)) : 0;
+  batch.forEach((id, index) => {
+    const card = tradeNotificationList.querySelector(`[data-notification-id="${id}"]`);
+    if (!card) return;
+    const controls = [...card.querySelectorAll("button")];
+    const restoreFocus = restoreKeyboardFocus && card.contains(document.activeElement);
+    const neighbor = card.nextElementSibling ?? card.previousElementSibling;
+    const target = neighbor?.querySelector("button");
+    const entrance = notificationEntrances.get(id);
+    const startStyle = getComputedStyle(card);
+    const start = { transform: startStyle.transform, opacity: startStyle.opacity };
+    entrance?.cancel();
+    controls.forEach((button) => { button.disabled = true; });
+    card.classList.add("is-deleting");
+    const finish = () => {
+      if (!notificationDeletions.has(id)) return;
+      notificationDeletions.delete(id);
+      dismissedNotifications.add(id);
+      renderNotifications();
+      if (restoreFocus && (document.activeElement === document.body || card.contains(document.activeElement))) {
+        const closeButton = tradeNotifications.querySelector(".notification-mobile-close");
+        const fallback = closeButton.getClientRects().length ? closeButton : tradeNotificationList;
+        (target?.isConnected && !target.disabled ? target : fallback).focus({ preventScroll: true });
+      }
+    };
+    const animation = notificationMotion.matches || !card.getClientRects().length ? null : card.animate([start, { transform: "translateX(-110%)", opacity: 0 }], { duration: 220, delay: index * stagger, easing: "cubic-bezier(0.4, 0, 0.6, 1)", fill: "forwards" });
+    notificationDeletions.set(id, { animation, finish });
+    if (animation) animation.onfinish = finish;
+    else finish();
+  });
+  renderNotifications();
+  if (restoreClearFocus && clearButton.disabled) tradeNotificationList.focus({ preventScroll: true });
+  document.getElementById("notificationStatus").textContent = `${batch.length}개 알림을 지웠습니다. 거래 기록은 유지됩니다.`;
+}
+
+function addMockFillNotification() {
+  const ownerKey = ["personal", "swing", "long"][mockFillSequence % 3];
+  const source = tradeExamples[mockFillSequence % 3];
+  const trade = { ...source, owner: ownerKey === "personal" ? "개인" : aiFixtures[ownerKey].name, ownerKey, date: "2026-09-22", time: "09.22 10:32", status: "전체체결" };
+  previewTrades.unshift(trade);
+  const item = notificationFromTrade(trade, `new-mock-fill-${++mockFillSequence}`);
+  item.sequence = mockFillSequence;
+  fillNotifications.push(item);
+  tradeNotificationList.scrollTop = 0;
+  render();
+  document.getElementById("notificationStatus").textContent = `${notificationOwner(item)} ${item.stock} ${item.quantity} ${item.side} 모의 체결 알림`;
+}
+
+function openTradeNotifications() {
+  if (window.innerWidth > 820) {
+    state.sidebarCollapsed = false;
+    document.getElementById("appShell").classList.add("has-sidebar-transition");
+    renderSidebar();
+    tradeNotificationList.focus({ preventScroll: true });
+  } else {
+    closeAiMenuPopup();
+    syncNotificationPlacement();
+    notificationCloseToRecord = false;
+    if (!mobileNotificationDialog.open) mobileNotificationDialog.showModal();
+    document.querySelector('.mobile-nav [data-action="open-notifications"]').setAttribute("aria-expanded", "true");
+    animatePendingNotifications();
+    tradeNotifications.querySelector(".notification-mobile-close").focus({ preventScroll: true });
   }
 }
 
-function highlightNewNotifications() {
-  if (notificationPanel.hidden) return;
-  const reduceMotion = notificationMotion.matches;
-  notificationPanel.querySelectorAll('[data-highlight-pending="true"]').forEach((article) => {
-    delete article.dataset.highlightPending;
-    article.classList.remove("is-new");
-    if (reduceMotion) return;
-    // Restart the brief highlight if another event replaces the same fixture row.
-    void article.offsetWidth;
-    article.classList.add("is-new");
-  });
+function openNotificationRecord(id) {
+  const item = fillNotifications.find((record) => record.id === id);
+  if (!item || dismissedNotifications.has(id) || notificationDeletions.has(id)) return;
+  if (mobileNotificationDialog.open) {
+    notificationCloseToRecord = true;
+    mobileNotificationDialog.close();
+  }
+  if (item.ownerKey === "personal") {
+    state.entity = "personal";
+    state.portfolioTab = "orders";
+    setRoute("portfolio");
+  } else {
+    state.selectedAi = item.ownerKey;
+    state.selectedAiDraft = null;
+    state.aiDetailTab = "orders";
+    state.aiMenuOpen = false;
+    setRoute("ai");
+  }
 }
 
 function renderTopbarMarkets() {
@@ -441,7 +605,7 @@ function renderTopbarMarkets() {
   document.getElementById("topbarMarkets").innerHTML = marketError
     ? `<span class="market-chip"><span class="status-dot is-error"></span><strong>시장 상태 확인 실패</strong><span>재시도 필요</span></span>`
     : `<span class="market-chip"><span class="status-dot"></span><strong>한국 정규장</strong><span>15:30까지</span></span>
-       <span class="market-chip"><span class="status-dot is-closed"></span><strong>미국 거래시간 외</strong><span>22:00 프리마켓</span></span>`;
+       <span class="market-chip is-closed"><span class="status-dot is-closed"></span><strong>미국 거래시간 외</strong><span>22:00 프리마켓</span></span>`;
 }
 
 function renderGlobalBanner() {
@@ -477,7 +641,7 @@ const tabIndicatorObserver = new ResizeObserver((entries) => {
 
 function tabSelection(control) {
   const active = control.querySelector("button.is-active");
-  return active?.dataset.stockTab || active?.dataset.portfolioTab || active?.dataset.aiDetailTab;
+  return active?.dataset.stockTab || active?.dataset.portfolioTab || active?.dataset.aiDetailTab || active?.dataset.entity;
 }
 
 function captureTabIndicators() {
@@ -597,7 +761,7 @@ function closeStockDetail() {
     state.detailOpen = false;
     state.orderDraft = { price: "", quantity: "" };
     render();
-    pageContent.querySelector(`[data-stock="${ticker}"]`)?.focus({ preventScroll: true });
+    pageContent.querySelector(`[data-stock-row="${ticker}"]`)?.focus({ preventScroll: true });
   });
 }
 
@@ -711,11 +875,11 @@ function stockRow(stock) {
   const priceDetail = state.stockTab === "holdings"
     ? `${state.seller === "personal" ? `${stock.held}주 · 평균 ${formatAverage(stock.avg)}` : `${aiFixtures[state.seller].holdings.find((holding) => holding.ticker === stock.ticker)?.quantity || 0}주 · ${escapeHtml(aiFixtures[state.seller].name)}`}${exceptionLabel ? ` · ${exceptionLabel}` : ""}`
     : exceptionLabel;
-  return `<tr class="${isSelected ? "is-selected" : ""}" data-stock-row="${stock.ticker}">
+  return `<tr class="${isSelected ? "is-selected" : ""}" data-stock-row="${stock.ticker}" role="button" tabindex="0" aria-label="${stock.name} 상세 보기" aria-describedby="stock-price-${stock.ticker} stock-change-${stock.ticker}" aria-expanded="${isSelected}">
     <td><div class="stock-identity"><span class="stock-logo">${stock.logo}</span><span><strong>${stock.name}</strong><small>${stock.ticker} · ${stock.market}</small></span></div></td>
-    <td class="is-number price-cell"><strong>${formatStockMoney(stock, stock.price)}</strong>${priceDetail ? `<span class="status-detail ${exceptionType ? `is-${exceptionType}` : ""}">${priceDetail}</span>` : ""}</td>
-    <td class="is-number change-cell ${directionClass(stock.direction)}"><strong>${formatStockMoney(stock, stock.change, true)}</strong><span>${stock.rate}</span></td>
-    <td><button class="row-action row-action--chevron" data-stock="${stock.ticker}" aria-label="${stock.name} 상세 보기">›</button></td>
+    <td class="is-number price-cell" id="stock-price-${stock.ticker}"><strong>${formatStockMoney(stock, stock.price)}</strong>${priceDetail ? `<span class="status-detail ${exceptionType ? `is-${exceptionType}` : ""}">${priceDetail}</span>` : ""}</td>
+    <td class="is-number change-cell ${directionClass(stock.direction)}" id="stock-change-${stock.ticker}"><strong>${formatStockMoney(stock, stock.change, true)}</strong><span>${stock.rate}</span></td>
+    <td><span class="row-action row-action--chevron" aria-hidden="true">›</span></td>
   </tr>`;
 }
 
@@ -969,7 +1133,7 @@ window.addEventListener("resize", () => {
 function renderPortfolioPage() {
   const entity = entityData();
   pageContent.innerHTML = `
-    <header class="page-heading entity-heading"><div class="page-heading__copy"><h1>투자 현황</h1></div><div class="entity-tabs" aria-label="투자 주체"><button class="${state.entity === "all" ? "is-active" : ""}" data-entity="all" aria-pressed="${state.entity === "all"}">전체</button><button class="${state.entity === "personal" ? "is-active" : ""}" data-entity="personal" aria-pressed="${state.entity === "personal"}">개인</button></div></header>
+    <header class="page-heading entity-heading"><div class="page-heading__copy"><h1>투자 현황</h1></div><div class="subtabs entity-tabs" data-sliding-tabs="portfolio-entity" aria-label="투자 주체"><button class="${state.entity === "all" ? "is-active" : ""}" data-entity="all" aria-pressed="${state.entity === "all"}">전체</button><button class="${state.entity === "personal" ? "is-active" : ""}" data-entity="personal" aria-pressed="${state.entity === "personal"}">개인</button></div></header>
     <div class="entity-heading entity-summary" style="margin-bottom:14px"><div><h2>${escapeHtml(entity.name)}</h2><p class="cell-secondary">${entity.description}</p></div></div>
     ${renderInvestmentSummary(entity)}
     ${renderAccountSection(state.entity, state.portfolioTab, "portfolio")}`;
@@ -1015,6 +1179,7 @@ function syncTradeHistory() {
   scroll.scrollLeft = view.scrollLeft;
   view.scrollTop = scroll.scrollTop;
   view.scrollLeft = scroll.scrollLeft;
+  fillAccountTradeViewport(section);
 }
 
 function resetTradeHistory() {
@@ -1043,11 +1208,18 @@ function loadNextAccountTrades(section = pageContent.querySelector("[data-trade-
   view.scrollTop = scroll.scrollTop;
   view.scrollLeft = scroll.scrollLeft;
   section.querySelector("[data-trade-count]").textContent = `${next} / ${trades.length}건 표시 · 모의 데이터`;
-  const more = section.querySelector("[data-action='load-more-account-trades']");
-  if (next === trades.length) {
-    if (more === document.activeElement) section.querySelector("[data-trade-count]").focus({ preventScroll: true });
-    more?.remove();
-  } else if (more) more.textContent = `${Math.min(10, trades.length - next)}건 더 보기`;
+}
+
+function fillAccountTradeViewport(section) {
+  if (!section?.isConnected) return;
+  const scroll = section.querySelector("[data-trade-scroll]");
+  if (!scroll?.clientHeight) return;
+  const key = section.dataset.tradeHistory;
+  while (scroll.scrollHeight <= scroll.clientHeight) {
+    const before = state.tradeVisible[key] ?? 10;
+    loadNextAccountTrades(section);
+    if ((state.tradeVisible[key] ?? 10) === before) break;
+  }
 }
 
 function renderPortfolioTable(entityKey, tab) {
@@ -1095,7 +1267,7 @@ function renderPortfolioTable(entityKey, tab) {
       </div>
       <div class="table-scroll trade-history-scroll" data-trade-scroll id="${tradeId}" role="region" aria-label="거래내역 목록" tabindex="0" style="height:${tradeHeight}px"><table class="data-table account-ledger-table account-trades-table">${ledgerColumns}<thead><tr><th>투자 주체</th><th>종목</th><th>구분</th><th class="is-number">평균 체결가격</th><th class="is-number">체결수량</th><th>결과</th><th>마지막 체결</th><th aria-hidden="true"></th></tr></thead>
         <tbody>${trades.length ? renderAccountTradeRows(trades.slice(0, visible)) : `<tr><td class="table-empty" colspan="8">조건에 맞는 거래내역이 없습니다.</td></tr>`}</tbody></table></div>
-      <div class="table-footer"><span data-trade-count tabindex="-1" role="status" aria-live="polite">${visible} / ${trades.length}건 표시 · 모의 데이터</span>${visible < trades.length ? `<button class="button button--small button--secondary" data-action="load-more-account-trades">${Math.min(10, trades.length - visible)}건 더 보기</button>` : ""}</div>
+      <div class="table-footer"><span data-trade-count role="status" aria-live="polite">${visible} / ${trades.length}건 표시 · 모의 데이터</span></div>
       <p class="table-note">해외 거래는 각 기록에 저장된 모의 환율로 환산합니다. 환율이 없는 기록은 확인 불가로 표시합니다.</p>
       ${renderHistoryResizer("trade", tradeId, tradeHeight)}
     </section>`;
@@ -1226,7 +1398,7 @@ function renderDecisionHistory(key) {
   return `<article class="surface-card decision-card" data-decision-history="${key}">
     <header class="card-heading"><div class="card-heading__copy"><h3>최근 판단 기록</h3><p>탐색·판단·주문 결과를 연결해 기록</p></div><span class="pill is-muted">전략 기준 보류</span></header>
     <div class="decision-scroll" data-decision-scroll id="${id}" role="region" aria-label="최근 판단 기록" tabindex="0" style="height:${height}px">${records.length ? `<div class="timeline">${renderDecisionRows(records.slice(0, visible))}</div>` : `<div class="ai-section-empty"><p>아직 판단 기록이 없습니다.</p></div>`}</div>
-    <div class="decision-footer"><span data-decision-count role="status" aria-live="polite">${visible} / ${records.length}건 표시 · 모의 데이터</span>${visible < records.length ? `<button class="button button--small button--secondary" data-action="load-more-decisions">${Math.min(decisionPageSize, records.length - visible)}건 더 보기</button>` : ""}</div>
+    <div class="decision-footer"><span data-decision-count role="status" aria-live="polite">${visible} / ${records.length}건 표시 · 모의 데이터</span></div>
     ${renderHistoryResizer("decision", id, height)}
   </article>`;
 }
@@ -1256,6 +1428,7 @@ function setHistoryHeight(section, value, persist = true) {
   handle.setAttribute("aria-valuemax", bounds.max);
   handle.setAttribute("aria-valuenow", height);
   handle.setAttribute("aria-valuetext", `${height}픽셀`);
+  if (persist && section.hasAttribute("data-trade-history")) fillAccountTradeViewport(section);
 }
 
 function loadNextDecisions(section) {
@@ -1274,11 +1447,6 @@ function loadNextDecisions(section) {
   view.scrollTop = scroll.scrollTop;
   const count = section.querySelector("[data-decision-count]");
   count.textContent = `${next} / ${records.length}건 표시 · 모의 데이터`;
-  const more = section.querySelector('[data-action="load-more-decisions"]');
-  if (next === records.length) {
-    if (more === document.activeElement) { count.tabIndex = -1; count.focus({ preventScroll: true }); }
-    more?.remove();
-  } else if (more) more.textContent = `${Math.min(decisionPageSize, records.length - next)}건 더 보기`;
 }
 
 document.addEventListener("scroll", (event) => {
@@ -1381,21 +1549,20 @@ function renderAiPage() {
   const selectedDraft = state.selectedAiDraft === null ? null : state.aiDrafts[state.selectedAiDraft];
   const stopping = aiStatus() === "stopping";
   const stopped = aiStatus() === "stopped";
-  const blocked = mismatch || state.scenario === "reconciled";
   const selectedEntity = entityData(state.selectedAi);
   const draftEntity = selectedDraft ? { name: selectedDraft.name, asset: selectedDraft.cash ?? selectedDraft.amount, cash: selectedDraft.cash ?? selectedDraft.amount, costBasis: 0, domestic: 0, us: 0, estimated: 0 } : null;
   pageContent.innerHTML = `
     <header class="page-heading"><div class="page-heading__copy ai-page-title"><span class="ai-spark">✦</span><h1>AI 트레이더</h1></div></header>
     <section class="ai-layout">
       <div class="ai-detail">
-        ${selectedDraft ? `<article class="surface-card ai-hero"><div class="ai-hero__top"><div class="ai-hero__identity"><span class="ai-avatar" aria-hidden="true">${aiTypeLetters[selectedDraft.style]}</span><div><span class="eyebrow">${selectedDraft.style} 트레이더 · 초안</span><h2>${escapeHtml(selectedDraft.name)}</h2><p>전략 기준 확정 후 운영 가능</p></div></div><div class="ai-actions"><button class="button button--small button--secondary" data-action="ai-rename" data-ai-draft-index="${state.selectedAiDraft}">이름 수정</button><button class="button button--small button--secondary" data-action="ai-funds" data-ai-draft-index="${state.selectedAiDraft}">자금 관리</button><button class="button button--small button--primary" disabled title="전략 기준 확정 후 사용할 수 있습니다">자동매매 시작</button></div></div><div class="notice" style="margin-top:18px"><strong>아직 운영 전인 초안입니다.</strong><span>전략 기준과 운영 흐름은 설계 중입니다.</span></div>${renderAiInvestmentScope(selectedDraft, { type: "draft", index: state.selectedAiDraft })}${renderInvestmentSummary(draftEntity, { draft: true })}</article>${renderAiDetailSections(selectedDraft)}` : `
+        ${selectedDraft ? `<article class="surface-card ai-hero"><div class="ai-hero__top"><div class="ai-hero__identity"><span class="ai-avatar" aria-hidden="true">${aiTypeLetters[selectedDraft.style]}</span><div><span class="eyebrow">${selectedDraft.style} 트레이더 · 초안</span><h2>${escapeHtml(selectedDraft.name)}</h2></div></div><div class="ai-actions"><button class="button button--small button--secondary" data-action="ai-rename" data-ai-draft-index="${state.selectedAiDraft}">이름 수정</button><button class="button button--small button--secondary" data-action="ai-funds" data-ai-draft-index="${state.selectedAiDraft}">자금 관리</button><button class="button button--small button--primary" disabled title="전략 기준 확정 후 사용할 수 있습니다">자동매매 시작</button></div></div><div class="notice" style="margin-top:18px"><strong>아직 운영 전인 초안입니다.</strong><span>전략 기준과 운영 흐름은 설계 중입니다.</span></div>${renderAiInvestmentScope(selectedDraft, { type: "draft", index: state.selectedAiDraft })}</article>${renderInvestmentSummary(draftEntity, { draft: true })}${renderAiDetailSections(selectedDraft)}` : `
         <article class="surface-card ai-hero">
-          <div class="ai-hero__top"><div class="ai-hero__identity"><span class="ai-avatar" aria-hidden="true">${aiTypeLetters[selected.type]}</span><div><span class="eyebrow">${selected.type} 트레이더</span><h2>${escapeHtml(selected.name)}</h2><p>${mismatch ? "장부 불일치로 신규 자동 주문 차단" : blocked ? "장부 대조 완료 · 직접 재개 필요" : stopped ? "자동매매 중지 완료 · 보유종목 유지" : stopping ? "자동 주문 종료 여부 확인 중" : "다음 정기 판단을 기다리는 중"}</p></div></div><div class="ai-actions"><button class="button button--small button--secondary" data-action="ai-rename">이름 수정</button><button class="button button--small button--secondary" data-action="ai-funds" ${stopped && !mismatch ? "" : "disabled"}>자금 관리</button>${stopped ? `<button class="button button--small button--primary" data-action="ai-resume" ${mismatch ? "disabled" : ""}>자동매매 재개</button>` : `<button class="button button--small button--danger" data-action="ai-pause" ${stopping ? "disabled" : ""}>자동매매 중지</button>`}</div></div>
+          <div class="ai-hero__top"><div class="ai-hero__identity"><span class="ai-avatar" aria-hidden="true">${aiTypeLetters[selected.type]}</span><div><span class="eyebrow">${selected.type} 트레이더</span><h2>${escapeHtml(selected.name)}</h2></div></div><div class="ai-actions"><button class="button button--small button--secondary" data-action="ai-rename">이름 수정</button><button class="button button--small button--secondary" data-action="ai-funds" ${stopped && !mismatch ? "" : "disabled"}>자금 관리</button>${stopped ? `<button class="button button--small button--primary" data-action="ai-resume" ${mismatch ? "disabled" : ""}>자동매매 재개</button>` : `<button class="button button--small button--danger" data-action="ai-pause" ${stopping ? "disabled" : ""}>자동매매 중지</button>`}</div></div>
           ${stopping ? `<div class="notice notice--warning" style="margin-top:18px"><strong>중지 처리 중입니다.</strong><span>접수 확인 중 1건의 접수 여부를 확인한 뒤 미체결 잔여수량을 취소합니다. 수동 매도와 재개는 아직 사용할 수 없습니다.</span></div>` : ""}
           ${mismatch ? `<div class="notice notice--danger" style="margin-top:18px"><strong>장부 대조가 필요합니다.</strong><span>개인과 모든 AI 장부 합계가 실제 계좌와 일치하기 전까지 재개할 수 없습니다.</span></div>` : ""}
           ${renderAiInvestmentScope(selected, { type: "active", key: state.selectedAi })}
-          ${renderInvestmentSummary(selectedEntity)}
         </article>
+        ${renderInvestmentSummary(selectedEntity)}
         ${renderAiDetailSections(selected, state.selectedAi)}`}
       </div>
     </section>`;
@@ -1507,7 +1674,7 @@ function openSellFlow(ticker, owner) {
   setRoute("stocks");
   state.detailOpen = true;
   render();
-  if (window.innerWidth <= 820) pageContent.querySelector('.stock-detail [data-action="close-detail"]')?.focus();
+  if (window.innerWidth <= 820) pageContent.querySelector('.stock-detail [data-action="close-detail"]')?.focus(); else pageContent.querySelector(`[data-stock-row="${state.selectedTicker}"]`)?.focus({ preventScroll: true });
 }
 
 function stopAi(key, afterStop) {
@@ -1633,6 +1800,16 @@ document.addEventListener("pointerdown", (event) => {
 document.addEventListener("click", (event) => {
   const closeDialogButton = event.target.closest("[data-dialog-close]");
   if (closeDialogButton) { closeAnimatedDialog(closeDialogButton.closest("dialog"), "cancel"); return; }
+  const notificationDismiss = event.target.closest("[data-notification-dismiss]");
+  if (notificationDismiss) { dismissNotifications([notificationDismiss.dataset.notificationDismiss], event.detail === 0); return; }
+  const notificationOpen = event.target.closest("[data-notification-open]");
+  if (notificationOpen) { openNotificationRecord(notificationOpen.dataset.notificationOpen); return; }
+  const notificationAction = event.target.closest('[data-action="open-notifications"], [data-action="clear-notifications"]');
+  if (notificationAction) {
+    if (notificationAction.dataset.action === "open-notifications") openTradeNotifications();
+    else dismissNotifications(activeNotifications().map((item) => item.id).reverse());
+    return;
+  }
   const sidebarToggle = event.target.closest('[data-action="toggle-sidebar"]');
   if (sidebarToggle) {
     const completeDetailClose = stockDetailMotion?.onComplete;
@@ -1668,19 +1845,19 @@ document.addEventListener("click", (event) => {
     return;
   }
 
-  const stockButton = event.target.closest("[data-stock]");
+  const stockButton = event.target.closest("[data-stock-row]");
   if (stockButton) {
     cancelStockDetailClose();
-    const nextTicker = stockButton.dataset.stock;
+    const nextTicker = stockButton.dataset.stockRow;
     if ((state.orderDraft.price || state.orderDraft.quantity) && nextTicker !== state.selectedTicker) {
       const nextStock = stockByTicker(nextTicker);
-      openConfirm({ eyebrow: "입력 초기화", title: `${nextStock.name}(으)로 이동할까요?`, copy: "현재 입력한 주문가격과 수량은 저장되지 않고 사라집니다. 이미 제출한 주문에는 영향을 주지 않습니다.", actionLabel: "입력 지우고 이동", danger: true, onConfirm: () => { state.seller = "personal"; state.orderDraft = { price: "", quantity: "" }; state.selectedTicker = nextTicker; state.detailOpen = true; render(); if (window.innerWidth <= 820) pageContent.querySelector('.stock-detail [data-action="close-detail"]')?.focus(); } });
+      openConfirm({ eyebrow: "입력 초기화", title: `${nextStock.name}(으)로 이동할까요?`, copy: "현재 입력한 주문가격과 수량은 저장되지 않고 사라집니다. 이미 제출한 주문에는 영향을 주지 않습니다.", actionLabel: "입력 지우고 이동", danger: true, onConfirm: () => { state.seller = "personal"; state.orderDraft = { price: "", quantity: "" }; state.selectedTicker = nextTicker; state.detailOpen = true; render(); if (window.innerWidth <= 820) pageContent.querySelector('.stock-detail [data-action="close-detail"]')?.focus(); else pageContent.querySelector(`[data-stock-row="${state.selectedTicker}"]`)?.focus({ preventScroll: true }); } });
     } else {
       state.seller = "personal";
       state.selectedTicker = nextTicker;
       state.detailOpen = true;
       render();
-      if (window.innerWidth <= 820) pageContent.querySelector('.stock-detail [data-action="close-detail"]')?.focus();
+      if (window.innerWidth <= 820) pageContent.querySelector('.stock-detail [data-action="close-detail"]')?.focus(); else pageContent.querySelector(`[data-stock-row="${state.selectedTicker}"]`)?.focus({ preventScroll: true });
     }
     return;
   }
@@ -1761,8 +1938,6 @@ document.addEventListener("click", (event) => {
   if (action === "view-pending-order") { state.entity = "personal"; state.portfolioTab = "orders"; setRoute("portfolio"); }
   if (action === "refresh-orders") { state.orderMessage = "09.22 10:32 기준 모의 주문 상태입니다. 외부 조회는 실행하지 않았습니다."; state.orderMessageOwner = null; renderAndFocus('[data-action="refresh-orders"]'); }
   if (action === "apply-trade-filter") { if (state.tradeFilter.start > state.tradeFilter.end) { toast("기간을 다시 확인해 주세요", "시작일은 종료일보다 늦을 수 없습니다."); return; } state.tradeFilterApplied = { ...state.tradeFilter }; resetTradeHistory(); renderAndFocus('[data-action="apply-trade-filter"]'); }
-  if (action === "load-more-account-trades") { loadNextAccountTrades(actionButton.closest("[data-trade-history]")); }
-  if (action === "load-more-decisions") loadNextDecisions(actionButton.closest("[data-decision-history]"));
   if (action === "amend-order" || action === "cancel-order") {
     const order = previewOrders.find((item) => item.id === actionButton.dataset.orderId);
     if (!order) return;
@@ -2184,29 +2359,25 @@ fundDialog.addEventListener("close", () => {
 });
 
 scenarioSelect.addEventListener("change", () => {
+  if (scenarioSelect.value === "new-fill") {
+    scenarioSelect.value = state.scenario;
+    addMockFillNotification();
+    return;
+  }
   state.scenario = scenarioSelect.value;
   render();
 });
 
-const notificationButton = document.getElementById("notificationButton");
-function closeNotifications(restoreFocus = true) {
-  notificationPanel.querySelectorAll(".is-new").forEach((article) => article.classList.remove("is-new"));
-  setAnimatedPanelOpen(notificationPanel, false);
-  notificationButton.setAttribute("aria-expanded", "false");
-  notificationButton.setAttribute("aria-label", "알림 열기");
-  if (restoreFocus) notificationButton.focus();
-}
-notificationButton.addEventListener("click", () => {
-  if (!notificationPanel.hidden && notificationPanel.classList.contains("is-open")) { closeNotifications(); return; }
-  setAnimatedPanelOpen(notificationPanel, true);
-  highlightNewNotifications();
-  notificationButton.setAttribute("aria-expanded", "true");
-  notificationButton.setAttribute("aria-label", "알림 닫기");
-  document.getElementById("notificationClose").focus();
+mobileNotificationDialog.addEventListener("close", () => {
+  const opener = document.querySelector('.mobile-nav [data-action="open-notifications"]');
+  opener.setAttribute("aria-expanded", "false");
+  if (!notificationCloseToRecord && window.innerWidth <= 820) opener.focus({ preventScroll: true });
+  notificationCloseToRecord = false;
 });
-document.getElementById("notificationClose").addEventListener("click", () => closeNotifications());
-notificationPanel.addEventListener("animationend", (event) => {
-  if (event.animationName === "notification-new-fade") event.target.classList.remove("is-new");
+mobileNotificationDialog.addEventListener("click", (event) => {
+  if (event.target !== mobileNotificationDialog) return;
+  const bounds = mobileNotificationDialog.getBoundingClientRect();
+  if (event.clientX < bounds.left || event.clientX > bounds.right || event.clientY < bounds.top || event.clientY > bounds.bottom) closeAnimatedDialog(mobileNotificationDialog);
 });
 notificationMotion.addEventListener("change", (event) => {
   if (!event.matches) return;
@@ -2217,13 +2388,15 @@ notificationMotion.addEventListener("change", (event) => {
   completeDetailClose?.();
   tabIndicatorAnimations.forEach((animation) => animation.cancel());
   tabIndicatorAnimations.clear();
-  notificationPanel.querySelectorAll(".is-new").forEach((article) => article.classList.remove("is-new"));
+  notificationEntrances.forEach((animation) => animation.cancel());
+  [...notificationDeletions.values()].forEach((pending) => { pending.animation?.cancel(); pending.finish(); });
   performanceEntranceObserver?.disconnect();
   document.querySelectorAll(".chart-wrap").forEach((chart) => chart.classList.remove("is-entering", "is-entering-pending"));
 });
 document.addEventListener("keydown", (event) => {
   if (event.target.closest("dialog[open]")) return;
-  if (event.key === "Escape" && !notificationPanel.hidden) { closeNotifications(); event.preventDefault(); return; }
+  const row = event.target.closest("[data-stock-row]");
+  if (row && (event.key === "Enter" || event.key === " ")) { event.preventDefault(); row.click(); return; }
   if (event.key === "Escape" && state.aiMenuOpen && (state.sidebarCollapsed || window.innerWidth <= 820)) { closeAiMenuPopup(); event.preventDefault(); return; }
   const detail = pageContent.querySelector('.stock-detail[aria-modal="true"]');
   if (!detail) return;
@@ -2241,6 +2414,7 @@ window.addEventListener("resize", () => {
   clearStockDetailMotion();
   completeDetailClose?.();
   syncMobileDetail();
+  syncNotificationPlacement();
   const detail = pageContent.querySelector('.stock-detail[aria-modal="true"]');
   if (detail && !detail.contains(document.activeElement)) detail.querySelector('[data-action="close-detail"]')?.focus();
 });

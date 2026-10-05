@@ -6,7 +6,7 @@
     <meta name="color-scheme" content="dark" />
     <title>aiTrade UI/UX Prototype</title>
     <link rel="stylesheet" crossorigin href="https://cdn.jsdelivr.net/gh/orioncactus/pretendard/dist/web/static/pretendard.css" />
-    <link rel="stylesheet" href="styles.css?v=20261004-33" />
+    <link rel="stylesheet" href="styles.css?v=20261006-13o" />
   </head>
   <body>
     <div class="app-shell" id="appShell">
@@ -26,17 +26,11 @@
                 <option value="market-error">장 정보 확인 실패</option>
                 <option value="order-uncertain">주문 접수 확인 중</option>
                 <option value="order-rejected">주문 거부</option>
+                <option value="new-fill">새 체결 알림</option>
                 <option value="ledger-mismatch">장부 불일치</option>
                 <option value="reconciled" hidden>장부 대조 완료</option>
               </select>
             </label>
-            <button class="icon-button" type="button" id="notificationButton" aria-label="알림 열기" aria-controls="notificationPanel" aria-expanded="false">
-              <svg class="icon icon--bell" viewBox="0 0 24 24" aria-hidden="true">
-                <path d="M18 8a6 6 0 0 0-12 0c0 7-3 7-3 9h18c0-2-3-2-3-9"></path>
-                <path d="M10 21h4"></path>
-              </svg>
-              <span class="notification-dot"></span>
-            </button>
             <span class="topbar__time" id="currentTime">09.22 10:32 KST · 예시</span>
           </div>
         </header>
@@ -68,6 +62,20 @@
           </div>
         </nav>
 
+        <div class="sidebar__notifications-host" id="sidebarNotificationsHost">
+          <button class="notification-compact" type="button" data-action="open-notifications" aria-label="체결 알림 보기" title="체결 알림 보기">
+            <span class="notification-icon" aria-hidden="true"><svg class="nav-icon" viewBox="0 0 24 24"><path d="M18 8a6 6 0 0 0-12 0c0 7-3 7-3 9h18c0-2-3-2-3-9" /><path d="M10 21h4" /></svg><span class="notification-count" data-notification-count hidden></span></span>
+          </button>
+          <section class="trade-notifications" id="tradeNotifications" aria-labelledby="tradeNotificationsTitle">
+            <header class="trade-notifications__header">
+              <h2 id="tradeNotificationsTitle">체결 알림</h2>
+              <button class="notification-clear-all" type="button" data-action="clear-notifications" aria-label="알림 전체 지우기">전체 지우기</button>
+              <button class="notification-mobile-close icon-button" type="button" data-dialog-close aria-label="알림 닫기">닫기</button>
+            </header>
+            <div class="trade-notification-list" id="tradeNotificationList" role="region" aria-label="최근 체결 알림 목록" tabindex="0"></div>
+          </section>
+        </div>
+
         <div class="sidebar__footer">
           <div class="profile-button" aria-label="yong 개인 계정">
             <span class="avatar">Y</span><span><strong>yong</strong><small>개인 계정</small></span><span aria-hidden="true">···</span>
@@ -80,6 +88,7 @@
         <button class="is-active" type="button" data-route="stocks"><svg class="nav-icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="M9 5v4" /><rect width="4" height="6" x="7" y="9" rx="1" /><path d="M9 15v2" /><path d="M17 3v2" /><rect width="4" height="8" x="15" y="5" rx="1" /><path d="M17 13v3" /><path d="M3 3v16a2 2 0 0 0 2 2h16" /></svg><small>종목</small></button>
         <button type="button" data-route="portfolio"><svg class="nav-icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="M21 12c.552 0 1.005-.449.95-.998a10 10 0 0 0-8.953-8.951c-.55-.055-.998.398-.998.95v8a1 1 0 0 0 1 1z" /><path d="M21.21 15.89A10 10 0 1 1 8 2.83" /></svg><small>현황</small></button>
         <button type="button" data-route="ai" aria-label="AI 트레이더" aria-controls="mobileAiPicker" aria-expanded="false"><svg class="nav-icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="M12 8V4H8" /><rect width="16" height="12" x="4" y="8" rx="2" /><path d="M2 14h2" /><path d="M20 14h2" /><path d="M15 13v2" /><path d="M9 13v2" /></svg><small>AI 트레이더</small></button>
+        <button type="button" data-action="open-notifications" aria-label="체결 알림 보기" aria-controls="mobileNotificationDialog" aria-expanded="false"><span class="notification-icon" aria-hidden="true"><svg class="nav-icon" viewBox="0 0 24 24"><path d="M18 8a6 6 0 0 0-12 0c0 7-3 7-3 9h18c0-2-3-2-3-9" /><path d="M10 21h4" /></svg><span class="notification-count" data-notification-count hidden></span></span><small>알림</small></button>
       </nav>
     </div>
 
@@ -227,17 +236,12 @@
       </form>
     </dialog>
 
-    <aside class="notification-panel" id="notificationPanel" aria-label="알림" hidden>
-      <header><div><span class="eyebrow">09.22 예시</span><h2>알림</h2></div><button class="icon-button" id="notificationClose" aria-label="알림 닫기">×</button></header>
-      <div class="notification-list">
-        <article><span class="notification-symbol is-rise">매수</span><div><strong>삼성전자 주문이 접수됐어요</strong><p>72,600원 · 10주 · 10:28</p></div></article>
-        <article><span class="notification-symbol is-warning">부분</span><div><strong>현대차 3주가 체결됐어요</strong><p>잔여 2주 · 10:14</p></div></article>
-        <article><span class="notification-symbol is-complete">완료</span><div><strong>Tesla 매도 주문이 모두 체결됐어요</strong><p data-notification-trade>—</p></div></article>
-      </div>
-      <p class="notification-note">앱이 열려 있을 때만 새 알림을 표시합니다.</p>
-    </aside>
+    <dialog class="dialog notification-dialog" id="mobileNotificationDialog" aria-labelledby="tradeNotificationsTitle">
+      <div class="dialog__surface" id="mobileNotificationsHost"></div>
+    </dialog>
+    <span class="sr-only" id="notificationStatus" role="status" aria-live="polite"></span>
 
     <div class="toast-region" id="toastRegion" aria-live="polite"></div>
-    <script src="prototype.js?v=20261004-27"></script>
+    <script src="prototype.js?v=20261006-13o"></script>
   </body>
 </html>

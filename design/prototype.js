@@ -28,7 +28,7 @@ const state = {
   portfolioTab: "holdings",
   aiDetailTab: "holdings",
   aiMenuOpen: false,
-  sidebarCollapsed: window.innerWidth < 1200,
+  desktopPanel: null,
   selectedAi: "swing",
   selectedAiDraft: null,
   aiStatuses: { swing: "running", long: "stopped" },
@@ -367,7 +367,7 @@ function renderShell() {
   renderSidebar();
   document.querySelectorAll("[data-route]").forEach((button) => {
     button.classList.toggle("is-active", button.dataset.route === state.route);
-    if (button.closest("nav")) button.setAttribute("aria-current", button.dataset.route === state.route && (state.route !== "ai" || !state.aiMenuOpen) ? "page" : "false");
+    if (button.closest("nav")) button.setAttribute("aria-current", button.dataset.route === state.route ? "page" : "false");
   });
   renderAiNavigation();
   renderTopbarMarkets();
@@ -376,36 +376,58 @@ function renderShell() {
 }
 
 function renderSidebar() {
-  const shell = document.getElementById("appShell");
-  const toggle = shell.querySelector(".sidebar-toggle");
-  const label = state.sidebarCollapsed ? "메뉴 펼치기" : "메뉴 접기";
-  shell.classList.toggle("is-sidebar-collapsed", state.sidebarCollapsed);
-  toggle.setAttribute("aria-expanded", String(!state.sidebarCollapsed));
-  toggle.setAttribute("aria-label", label);
-  toggle.title = label;
+  const open = window.innerWidth > 820 && state.desktopPanel !== null;
+  const panels = document.getElementById("sidebarPanels");
+  if (open) panels.dataset.panel = state.desktopPanel;
+  panels.classList.toggle("is-open", open);
+  panels.inert = !open;
+  panels.setAttribute("aria-hidden", String(!open));
+  document.getElementById("sidebarNotificationsHost").hidden = panels.dataset.panel !== "notifications";
+  const notificationButton = document.querySelector('.sidebar [data-action="open-notifications"]');
+  notificationButton.classList.toggle("is-panel-open", open && state.desktopPanel === "notifications");
+  notificationButton.setAttribute("aria-expanded", String(open && state.desktopPanel === "notifications"));
   syncNotificationPlacement();
 }
 
 function renderAiNavigation() {
-  const open = state.route === "ai" && state.aiMenuOpen;
+  const desktop = window.innerWidth > 820;
+  const open = desktop ? state.desktopPanel === "ai" : state.route === "ai" && state.aiMenuOpen;
   const items = `${Object.entries(aiFixtures).map(([key, ai]) => {
     const selected = state.selectedAiDraft === null && state.selectedAi === key;
     const status = aiStatus(key) === "running" ? "실행 중" : aiStatus(key) === "stopping" ? "중지 처리 중" : "중지 완료";
-    return `<button class="ai-nav-item ${selected ? "is-selected" : ""}" type="button" data-ai="${key}" aria-current="${selected ? "page" : "false"}"><span class="ai-nav-avatar" aria-hidden="true">${aiTypeLetters[ai.type]}</span><span class="ai-nav-copy"><strong>${escapeHtml(ai.name)}</strong><small>${ai.type} · ${status}</small></span></button>`;
+    return `<button class="ai-nav-item ${selected ? "is-selected" : ""}" type="button" data-ai="${key}" aria-current="${selected && state.route === "ai" ? "page" : "false"}"><span class="ai-nav-avatar" aria-hidden="true">${aiTypeLetters[ai.type]}</span><span class="ai-nav-copy"><strong>${escapeHtml(ai.name)}</strong><small>${ai.type} · ${status}</small></span></button>`;
   }).join("")}${state.aiDrafts.map((draft, index) => {
     const selected = state.selectedAiDraft === index;
-    return `<button class="ai-nav-item ${selected ? "is-selected" : ""}" type="button" data-ai-draft="${index}" aria-current="${selected ? "page" : "false"}"><span class="ai-nav-avatar" aria-hidden="true">${aiTypeLetters[draft.style]}</span><span class="ai-nav-copy"><strong>${escapeHtml(draft.name)}</strong><small>${draft.style} · 초안</small></span></button>`;
+    return `<button class="ai-nav-item ${selected ? "is-selected" : ""}" type="button" data-ai-draft="${index}" aria-current="${selected && state.route === "ai" ? "page" : "false"}"><span class="ai-nav-avatar" aria-hidden="true">${aiTypeLetters[draft.style]}</span><span class="ai-nav-copy"><strong>${escapeHtml(draft.name)}</strong><small>${draft.style} · 초안</small></span></button>`;
   }).join("")}<button class="ai-nav-add" type="button" data-action="ai-create"><span aria-hidden="true">＋</span> AI 트레이더 추가</button>`;
   const submenu = document.getElementById("aiNavSubmenu");
   const list = submenu.querySelector(".ai-nav-list");
   if (list.innerHTML !== items) list.innerHTML = items;
-  submenu.classList.toggle("is-open", open);
-  submenu.inert = !open;
-  submenu.setAttribute("aria-hidden", String(!open));
+  submenu.hidden = !desktop || document.getElementById("sidebarPanels").dataset.panel !== "ai";
   const mobilePicker = document.getElementById("mobileAiPicker");
-  setAnimatedPanelOpen(mobilePicker, open);
-  if (open && mobilePicker.innerHTML !== items) mobilePicker.innerHTML = items;
-  document.querySelectorAll('[data-route="ai"]').forEach((button) => button.setAttribute("aria-expanded", String(open)));
+  setAnimatedPanelOpen(mobilePicker, !desktop && open);
+  if (!desktop && open && mobilePicker.innerHTML !== items) mobilePicker.innerHTML = items;
+  document.querySelectorAll('[data-route="ai"]').forEach((button) => {
+    button.setAttribute("aria-expanded", String(open && desktop === Boolean(button.closest(".sidebar"))));
+    button.classList.toggle("is-panel-open", desktop && open && Boolean(button.closest(".sidebar")));
+  });
+}
+
+function closeDesktopPanel(restoreFocus = document.getElementById("sidebarPanels").contains(document.activeElement)) {
+  const panel = state.desktopPanel;
+  state.desktopPanel = null;
+  renderSidebar();
+  renderAiNavigation();
+  if (restoreFocus && panel) document.querySelector(panel === "ai" ? '.sidebar [data-route="ai"]' : '.sidebar [data-action="open-notifications"]')?.focus({ preventScroll: true });
+}
+
+function toggleDesktopPanel(panel) {
+  if (state.desktopPanel === panel) { closeDesktopPanel(); return; }
+  state.desktopPanel = panel;
+  renderSidebar();
+  renderAiNavigation();
+  const target = panel === "ai" ? document.querySelector("#aiNavSubmenu .ai-nav-item.is-selected") : tradeNotificationList;
+  target?.focus({ preventScroll: true });
 }
 
 // Alerts are mock fill summaries; dismissal never changes their source records.
@@ -439,33 +461,21 @@ function notificationCardContents(item) {
   </button><button class="trade-notification__dismiss" type="button" data-notification-dismiss="${item.id}" aria-label="${owner} ${title} 알림 지우기" title="이 알림 지우기"><svg viewBox="0 0 16 16" aria-hidden="true" focusable="false"><path d="m3 3 10 10M13 3 3 13" /></svg></button>`;
 }
 
-function syncSidebarNotificationWidth() {
-  if (window.innerWidth <= 820) return;
-  const sidebar = document.querySelector(".sidebar");
-  const host = document.getElementById("sidebarNotificationsHost");
-  const scrollbarWidth = `${Math.max(0, sidebar.offsetWidth - sidebar.clientWidth)}px`;
-  if (host.style.getPropertyValue("--sidebar-scrollbar-width") !== scrollbarWidth) host.style.setProperty("--sidebar-scrollbar-width", scrollbarWidth);
-}
-
-const sidebarNotificationResizeObserver = new ResizeObserver(syncSidebarNotificationWidth);
-sidebarNotificationResizeObserver.observe(document.querySelector(".sidebar"));
-
 function syncNotificationPlacement() {
   const mobile = window.innerWidth <= 820;
   const host = document.getElementById(mobile ? "mobileNotificationsHost" : "sidebarNotificationsHost");
-  syncSidebarNotificationWidth();
   if (!mobile && mobileNotificationDialog.open) {
     dialogClosures.get(mobileNotificationDialog)?.finish();
     mobileNotificationDialog.close();
   }
   if (tradeNotifications.parentElement !== host) host.append(tradeNotifications);
-  // Hidden cards must not remain keyboard destinations in a collapsed menu.
-  tradeNotifications.inert = !mobile && state.sidebarCollapsed;
+  // Closed panels must not leave cards in the keyboard order.
+  tradeNotifications.inert = !mobile && state.desktopPanel !== "notifications";
   animatePendingNotifications();
 }
 
 function animatePendingNotifications() {
-  if (!tradeNotifications.getClientRects().length || (window.innerWidth <= 820 && !mobileNotificationDialog.open)) return;
+  if (!tradeNotifications.getClientRects().length || (window.innerWidth > 820 ? state.desktopPanel !== "notifications" : !mobileNotificationDialog.open)) return;
   tradeNotificationList.querySelectorAll("[data-notification-id]").forEach((card) => {
     const id = card.dataset.notificationId;
     if (enteredNotifications.has(id) || notificationDeletions.has(id)) return;
@@ -565,10 +575,7 @@ function addMockFillNotification() {
 
 function openTradeNotifications() {
   if (window.innerWidth > 820) {
-    state.sidebarCollapsed = false;
-    document.getElementById("appShell").classList.add("has-sidebar-transition");
-    renderSidebar();
-    tradeNotificationList.focus({ preventScroll: true });
+    toggleDesktopPanel("notifications");
   } else {
     closeAiMenuPopup();
     syncNotificationPlacement();
@@ -583,6 +590,7 @@ function openTradeNotifications() {
 function openNotificationRecord(id) {
   const item = fillNotifications.find((record) => record.id === id);
   if (!item || dismissedNotifications.has(id) || notificationDeletions.has(id)) return;
+  closeDesktopPanel(false);
   if (mobileNotificationDialog.open) {
     notificationCloseToRecord = true;
     mobileNotificationDialog.close();
@@ -1777,6 +1785,7 @@ function setRoute(route) {
   if (route !== "stocks") state.seller = "personal";
   if (route === "stocks" && state.route !== "stocks") state.detailOpen = window.innerWidth > 820;
   if (route !== "ai") state.aiMenuOpen = false;
+  if (route !== "ai") state.desktopPanel = null;
   state.route = route;
   render();
   pageContent.focus({ preventScroll: true });
@@ -1792,8 +1801,12 @@ function closeAiMenuPopup() {
 }
 
 document.addEventListener("pointerdown", (event) => {
-  if (!state.aiMenuOpen || (window.innerWidth > 820 && !state.sidebarCollapsed)) return;
-  if (event.target.closest('.ai-nav-group, #mobileAiPicker, [data-route="ai"]')) return;
+  if (event.target.closest("dialog[open]")) return;
+  if (window.innerWidth > 820) {
+    if (state.desktopPanel && !event.target.closest('.sidebar-panels, .sidebar [data-route="ai"], .sidebar [data-action="open-notifications"]')) closeDesktopPanel();
+    return;
+  }
+  if (!state.aiMenuOpen || event.target.closest('#mobileAiPicker, .mobile-nav [data-route="ai"]')) return;
   closeAiMenuPopup();
 });
 
@@ -1810,18 +1823,10 @@ document.addEventListener("click", (event) => {
     else dismissNotifications(activeNotifications().map((item) => item.id).reverse());
     return;
   }
-  const sidebarToggle = event.target.closest('[data-action="toggle-sidebar"]');
-  if (sidebarToggle) {
-    const completeDetailClose = stockDetailMotion?.onComplete;
-    clearStockDetailMotion();
-    completeDetailClose?.();
-    state.sidebarCollapsed = !state.sidebarCollapsed;
-    document.getElementById("appShell").classList.add("has-sidebar-transition");
-    renderSidebar();
-    return;
-  }
+  if (event.target.closest('[data-action="close-sidebar-panel"]')) { closeDesktopPanel(true); return; }
   const routeButton = event.target.closest("[data-route]");
   if (routeButton) {
+    if (routeButton.dataset.route === "ai" && window.innerWidth > 820) { toggleDesktopPanel("ai"); return; }
     if (routeButton.dataset.route === "ai") state.aiMenuOpen = state.route !== "ai" || !state.aiMenuOpen;
     if (routeButton.dataset.route === "stocks" && state.route !== "stocks") state.seller = "personal";
     setRoute(routeButton.dataset.route);
@@ -1873,7 +1878,7 @@ document.addEventListener("click", (event) => {
     state.selectedAi = aiButton.dataset.ai;
     state.selectedAiDraft = null;
     if (window.innerWidth <= 820) state.aiMenuOpen = false;
-    render();
+    setRoute("ai");
     (window.innerWidth <= 820 ? pageContent : document.querySelector(`#aiNavSubmenu [data-ai="${state.selectedAi}"]`))?.focus({ preventScroll: true });
     window.scrollTo({ top: 0, behavior: "auto" });
     return;
@@ -1882,7 +1887,7 @@ document.addEventListener("click", (event) => {
   if (aiDraftButton) {
     state.selectedAiDraft = Number(aiDraftButton.dataset.aiDraft);
     if (window.innerWidth <= 820) state.aiMenuOpen = false;
-    render();
+    setRoute("ai");
     (window.innerWidth <= 820 ? pageContent : document.querySelector(`#aiNavSubmenu [data-ai-draft="${state.selectedAiDraft}"]`))?.focus({ preventScroll: true });
     window.scrollTo({ top: 0, behavior: "auto" });
     return;
@@ -2327,8 +2332,9 @@ aiFormDialog.addEventListener("close", () => {
   state.aiDrafts.push({ name: aiForm.elements.name.value.trim(), style: aiForm.elements.style.value, amount, cash: amount, selectionMode: aiCreation.selectionMode, selectedTickers: aiCreation.selectionMode === "fixed" ? [...aiCreation.tickers] : [] });
   aiCreation = { selectionMode: "auto", tickers: [], source: "search" };
   state.selectedAiDraft = state.aiDrafts.length - 1;
-  state.aiMenuOpen = window.innerWidth > 820;
-  render();
+  state.aiMenuOpen = false;
+  state.desktopPanel = window.innerWidth > 820 ? "ai" : null;
+  setRoute("ai");
   (window.innerWidth <= 820 ? pageContent : document.querySelector(`#aiNavSubmenu [data-ai-draft="${state.selectedAiDraft}"]`))?.focus({ preventScroll: true });
   toast("AI 트레이더 초안을 목록에 추가했어요", "전략 기준 확정 전에는 자동매매를 시작할 수 없습니다.");
 });
@@ -2397,7 +2403,8 @@ document.addEventListener("keydown", (event) => {
   if (event.target.closest("dialog[open]")) return;
   const row = event.target.closest("[data-stock-row]");
   if (row && (event.key === "Enter" || event.key === " ")) { event.preventDefault(); row.click(); return; }
-  if (event.key === "Escape" && state.aiMenuOpen && (state.sidebarCollapsed || window.innerWidth <= 820)) { closeAiMenuPopup(); event.preventDefault(); return; }
+  if (event.key === "Escape" && window.innerWidth > 820 && state.desktopPanel) { closeDesktopPanel(true); event.preventDefault(); return; }
+  if (event.key === "Escape" && state.aiMenuOpen && window.innerWidth <= 820) { closeAiMenuPopup(); event.preventDefault(); return; }
   const detail = pageContent.querySelector('.stock-detail[aria-modal="true"]');
   if (!detail) return;
   if (event.key === "Escape") { detail.querySelector('[data-action="close-detail"]')?.click(); event.preventDefault(); }
@@ -2408,6 +2415,15 @@ document.addEventListener("keydown", (event) => {
     if (event.shiftKey && document.activeElement === first) { last.focus(); event.preventDefault(); }
     else if (!event.shiftKey && document.activeElement === last) { first.focus(); event.preventDefault(); }
   }
+});
+const mobileNavigationQuery = window.matchMedia("(max-width: 820px)");
+mobileNavigationQuery.addEventListener("change", () => {
+  const focusInMenu = document.querySelector(".sidebar").contains(document.activeElement) || document.getElementById("mobileAiPicker").contains(document.activeElement) || mobileNotificationDialog.contains(document.activeElement);
+  state.desktopPanel = null;
+  state.aiMenuOpen = false;
+  renderSidebar();
+  renderAiNavigation();
+  if (focusInMenu && !mobileNotificationDialog.open) pageContent.focus({ preventScroll: true });
 });
 window.addEventListener("resize", () => {
   const completeDetailClose = stockDetailMotion?.onComplete;
